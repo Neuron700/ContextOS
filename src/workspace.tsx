@@ -57,6 +57,10 @@ type View =
   | "decisions"
   | "documents"
   | "settings";
+type InstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+};
 const navigation: { id: View; label: string; icon: typeof Activity }[] = [
   { id: "home", label: "Home", icon: Activity },
   { id: "projects", label: "Projects", icon: Folder },
@@ -110,10 +114,21 @@ export default function App() {
     [relationTarget, setRelationTarget] = useState(""),
     [relationType, setRelationType] = useState<Relation["type"]>("related_to"),
     [restore, setRestore] = useState<Workspace | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
+  const [installed, setInstalled] = useState(false);
   const queue = useRef(Promise.resolve()),
     stateRef = useRef(state),
     version = useRef(0);
   stateRef.current = state;
+  useEffect(() => {
+    const standalone = window.matchMedia('(display-mode: standalone)');
+    setInstalled(standalone.matches);
+    const prompt = (event: Event) => { event.preventDefault(); setInstallPrompt(event as InstallPromptEvent); };
+    const complete = () => { setInstalled(true); setInstallPrompt(null); };
+    window.addEventListener('beforeinstallprompt', prompt);
+    window.addEventListener('appinstalled', complete);
+    return () => { window.removeEventListener('beforeinstallprompt', prompt); window.removeEventListener('appinstalled', complete); };
+  }, []);
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -1069,6 +1084,14 @@ export default function App() {
                 </div>
                 <Shield size={18} />
               </div>
+              {!('__TAURI_INTERNALS__' in window) && <div className="setting">
+                <div>
+                  <b>Desktop app</b>
+                  <p>{installed ? 'ContextOS is installed in this browser profile.' : 'Install ContextOS as an app from your browser. Open it online once to cache the interface for offline use.'}</p>
+                  {!installed && !installPrompt && <p>In Chrome or Edge, use the install icon in the address bar or the browser menu. Installation depends on browser support.</p>}
+                </div>
+                {installPrompt && !installed && <button className="primary" onClick={async () => { await installPrompt.prompt(); await installPrompt.userChoice; setInstallPrompt(null); }}>Install app</button>}
+              </div>}
               <div className="setting">
                 <div>
                   <b>Backup and restore</b>
